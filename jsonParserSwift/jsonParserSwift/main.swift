@@ -23,7 +23,6 @@ var jsonString = ""
 if let url = URL(string: "https://www.reddit.com/.json") {
     do {
         jsonString = try String(contentsOf: url)
-        print(jsonString)
         print("JSON File successfully loaded")
     }
     catch {
@@ -170,8 +169,9 @@ func parseObject(_ input: String) -> (parsed: JSON, rest: String)? {
     return (JSON.object(parsedObject), s)
 }
 
-if let dataCheck = parseValue(jsonString) {
-    switch dataCheck.parsed {
+if let data = parseValue(jsonString) {
+    print("\nParsed value is: ")
+    switch data.parsed {
     case JSON.null:
         print("null")
     case JSON.bool(let v):
@@ -185,9 +185,9 @@ if let dataCheck = parseValue(jsonString) {
     case JSON.object(let o):
         print(o)
     }
-    print(dataCheck.rest)
+    print("\nJSON Data is valid and has been successfully parsed\n")
 }
 else {
-    print("Invalid JSON Data")
+    print("\nInvalid JSON Data\n")
 }
 
