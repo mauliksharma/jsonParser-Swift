@@ -9,74 +9,185 @@
 import Foundation
 
 
-var str = "Hello, playground"
 indirect enum JSON {
     case null
     case bool(Bool)
-    case num(Double)
     case str(String)
-    case arr(Array<JSON>)
-    case object(Dictionary<String, JSON>)
+    case num(Double)
+    case arr([JSON])
+    case object([String:JSON])
     
 }
-var jsonString = readLine()!
+var jsonString = ""
 
-var start = jsonString.startIndex
-var end = jsonString.endIndex
-
-
-func parseNull() -> JSON? {
-    guard jsonString.count >= 4 else { return nil }
-    let range = start...jsonString.index(start, offsetBy: 3)
-    let testNull = String(jsonString[range])
-    guard (testNull == "null" || testNull == "NULL" || testNull == "") else { return nil }
-    jsonString.removeSubrange(range)
-    return JSON.null
+if let url = URL(string: "https://www.reddit.com/.json") {
+    do {
+        jsonString = try String(contentsOf: url)
+        print(jsonString)
+        print("JSON File successfully loaded")
+    }
+    catch {
+        print("Contents could not be loaded")
+    }
+}
+else {
+    print("URL was bad!")
 }
 
-
-func parseBool() -> JSON? {
-    guard jsonString.count >= 4 else { return nil }
-    let range1 = start...jsonString.index(start, offsetBy: 3)
-    let testTrue = String(jsonString[range1])
-    if (testTrue == "true" || testTrue == "TRUE") {
-        jsonString.removeSubrange(range1)
-        return JSON.bool(true)
+/* while let r = readLine() {
+    jsonString += r
+    if r == "" {
+        break
     }
-    guard jsonString.count >= 5 else { return nil }
-    let range2 = start...jsonString.index(start, offsetBy: 4)
-    let testFalse = String(jsonString[range2])
-    if (testFalse == "false" || testFalse == "FALSE") {
-        jsonString.removeSubrange(range2)
-        return JSON.bool(false)
+} */
+
+
+func parseValue(_ input: String) -> (parsed: JSON, rest: String)? {
+    let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parseFunctions = [parseNull, parseBool, parseString, parseNumber, parseArray, parseObject]
+    for parse in parseFunctions  {
+        if let value = parse(s) {
+            return value
+        }
     }
     return nil
 }
 
 
-func parseString() -> JSON? {
-    let nsString = jsonString as NSString
-    let nsRange = NSRange(location: 0, length: nsString.length)
-    let regex = try! NSRegularExpression(pattern: "^\"([^\"\\\\]|\\\\[\"\\\\bfnrt\\/]|\\\\u[0-9a-f]{4})*\"$")
-    guard let firstMatchedRange = regex.firstMatch(in: jsonString, options: [], range: nsRange) else { return nil }
-    let matchedString = nsString.substring(with: firstMatchedRange.range)
-    print(matchedString)
-    jsonString.removeSubrange(start..<jsonString.index(start, offsetBy: matchedString.count))
-    return JSON.str(matchedString)
-    
+func parseNull(_ input: String) -> (parsed: JSON, rest: String)?  {
+    var s = input
+    guard s.hasPrefix("null") else { return nil }
+    s.removeFirst(4)
+    return (JSON.null, s)
 }
 
 
-func parseNumber() -> JSON? {
-    let nsString = jsonString as NSString
+func parseBool(_ input: String) -> (parsed: JSON, rest: String)? {
+    var s = input
+    if s.hasPrefix("true") {
+        s.removeFirst(4)
+        return (JSON.bool(true), s)
+    }
+    if s.hasPrefix("false") {
+        s.removeFirst(5)
+        return (JSON.bool(false), s)
+    }
+    return nil
+}
+
+
+func parseString(_ input: String) -> (parsed: JSON, rest: String)? {
+    var s = input
+    let nsString = s as NSString
     let nsRange = NSRange(location: 0, length: nsString.length)
-    let regex = try! NSRegularExpression(pattern: "(-?(?=[1-9]|0(?!\\d))\\d+(\\.\\d+)?([eE][+-]?\\d+)?)")
-    guard let firstMatchedRange = regex.firstMatch(in: jsonString, options: [], range: nsRange) else { return nil }
+    let regex = try! NSRegularExpression(pattern: "^\"([^\"\\\\]|\\\\[\"\\\\bfnrt\\/]|\\\\u[0-9a-f]{4})*\"")
+    guard let firstMatchedRange = regex.firstMatch(in: s, options: [], range: nsRange) else { return nil }
+    var matchedString = nsString.substring(with: firstMatchedRange.range)
+    matchedString.removeFirst()
+    matchedString.removeLast()
+    s.removeFirst(matchedString.count + 2)
+    return (JSON.str(matchedString), s)
+}
+
+func getStringValue(of stringJSON: JSON) -> String? {
+    switch stringJSON {
+    case .str(let value):
+        return value
+    default:
+        return nil
+    }
+}
+
+func parseNumber(_ input: String) -> (parsed: JSON, rest: String)? {
+    var s = input
+    let nsString = s as NSString
+    let nsRange = NSRange(location: 0, length: nsString.length)
+    let regex = try! NSRegularExpression(pattern: "^(-?(?=[1-9]|0(?!\\d))\\d+(\\.\\d+)?([eE][+-]?\\d+)?)")
+    guard let firstMatchedRange = regex.firstMatch(in: s, options: [], range: nsRange) else { return nil }
     let matchedString = nsString.substring(with: firstMatchedRange.range)
     guard let resultNumber = Double(matchedString) else { return nil }
-    print(resultNumber) //Remove this
-    jsonString.removeSubrange(start..<jsonString.index(start, offsetBy: matchedString.count))
-    print(jsonString)
-    return JSON.num(resultNumber)
+    s.removeFirst(matchedString.count)
+    return (JSON.num(resultNumber), s)
+}
+
+func checkComma(_ input: String) -> String? {
+    var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix(",") {
+        s.removeFirst()
+        return s
+    }
+    return nil
+}
+
+func checkColon(_ input: String) -> String? {
+    var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix(":") {
+        s.removeFirst()
+        return s
+    }
+    return nil
+}
+
+
+func parseArray(_ input: String) -> (parsed: JSON, rest: String)? {
+    var s = input
+    guard s.hasPrefix("[") else { return nil }
+    s.removeFirst()
+    var parsedArray = [JSON]()
+    while !s.isEmpty {
+        guard let foundElement = parseValue(s) else { break }
+        parsedArray.append(foundElement.parsed)
+        s = foundElement.rest
+        guard let findNext = checkComma(s) else { break }
+        s = findNext
+    }
+    s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard s.hasPrefix("]") else { return nil }
+    s.removeFirst()
+    return (JSON.arr(parsedArray), s)
+}
+
+func parseObject(_ input: String) -> (parsed: JSON, rest: String)? {
+    var s = input
+    guard s.hasPrefix("{") else { return nil }
+    s.removeFirst()
+    var parsedObject = [String:JSON]()
+    while !s.isEmpty {
+        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let foundKey = parseString(s) else { break }
+        s = foundKey.rest
+        guard let findValue = checkColon(s) else { break }
+        s = findValue
+        guard let foundValue = parseValue(s) else { break }
+        s = foundValue.rest
+        parsedObject[getStringValue(of: foundKey.parsed)!] = foundValue.parsed
+        guard let findNext = checkComma(s) else { break }
+        s = findNext
+    }
+    s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard s.hasPrefix("}") else { return nil }
+    s.removeFirst()
+    return (JSON.object(parsedObject), s)
+}
+
+if let dataCheck = parseValue(jsonString) {
+    switch dataCheck.parsed {
+    case JSON.null:
+        print("null")
+    case JSON.bool(let v):
+        print(v)
+    case JSON.str(let s):
+        print(s)
+    case JSON.num(let d):
+        print(d)
+    case JSON.arr(let a):
+        print(a)
+    case JSON.object(let o):
+        print(o)
+    }
+    print(dataCheck.rest)
+}
+else {
+    print("Invalid JSON Data")
 }
 
